@@ -1,0 +1,23 @@
+{{define "title"}}控制台 - iDaas{{end}}
+{{define "content"}}
+<div class="page-head">
+  <h2>角色控制台</h2>
+  <p class="hint">选择一个已绑定的 RAM 角色，将以该身份登录阿里云控制台。</p>
+</div>
+{{if .Bindings}}
+<div class="role-grid">
+  {{range .Bindings}}
+  <form method="post" action="/role/{{.Role.ID}}/console" class="role-card">
+    <input type="hidden" name="binding_id" value="{{.UserRole.ID}}">
+    <h3>{{.Role.Name}}</h3>
+    <p class="arn" title="{{.Role.ARN}}">{{.Role.ARN}}</p>
+    {{if .Role.Description}}<p class="desc">{{.Role.Description}}</p>{{end}}
+    {{if .UserRole.Remark}}<p class="remark">备注：{{.UserRole.Remark}}</p>{{end}}
+    <button type="submit" class="btn primary">登录控制台</button>
+  </form>
+  {{end}}
+</div>
+{{else}}
+<div class="empty">你还没有可用的角色绑定。请联系管理员分配 RAM 角色。</div>
+{{end}}
+{{end}}

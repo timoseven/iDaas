@@ -1,0 +1,37 @@
+{{define "title"}}RAM 角色管理 - iDaas{{end}}
+{{define "content"}}
+<div class="page-head">
+  <h2>RAM 角色</h2>
+  <a href="/admin/roles/new" class="btn primary">新建角色</a>
+</div>
+{{if .Roles}}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>ID</th><th>名称</th><th>ARN</th><th>说明</th><th>状态</th><th>绑定用户数</th><th>创建时间</th><th class="actions-col">操作</th></tr>
+    </thead>
+    <tbody>
+    {{range .Roles}}
+      <tr>
+        <td>{{.ID}}</td>
+        <td>{{.Name}}</td>
+        <td class="arn" title="{{.ARN}}">{{.ARN}}</td>
+        <td>{{if .Description}}{{.Description}}{{else}}<span class="muted">—</span>{{end}}</td>
+        <td>{{if .IsActive}}<span class="badge ok">启用</span>{{else}}<span class="badge warn">停用</span>{{end}}</td>
+        <td>{{index $.RoleCounts .ID}}</td>
+        <td>{{formatDate .CreatedAt}}</td>
+        <td class="actions-col">
+          <a href="/admin/roles/{{.ID}}/edit" class="btn sm">编辑</a>
+          <form method="post" action="/admin/roles/{{.ID}}/delete" class="inline" onsubmit="return confirm('确认删除角色 {{.Name}}？所有用户的该角色绑定将被移除。');">
+            <button type="submit" class="btn sm danger">删除</button>
+          </form>
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="empty">暂无角色。先在阿里云 RAM 创建角色并复制其 ARN，然后点击「新建角色」登记。</div>
+{{end}}
+{{end}}

@@ -1,0 +1,37 @@
+{{define "title"}}用户管理 - iDaas{{end}}
+{{define "content"}}
+<div class="page-head">
+  <h2>用户</h2>
+  <a href="/admin/users/new" class="btn primary">新建用户</a>
+</div>
+{{if .Users}}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>ID</th><th>用户名</th><th>显示名</th><th>邮箱</th><th>管理员</th><th>状态</th><th>创建时间</th><th class="actions-col">操作</th></tr>
+    </thead>
+    <tbody>
+    {{range .Users}}
+      <tr>
+        <td>{{.ID}}</td>
+        <td>{{.Username}}</td>
+        <td>{{if .DisplayName}}{{.DisplayName}}{{else}}<span class="muted">—</span>{{end}}</td>
+        <td>{{if .Email}}{{.Email}}{{else}}<span class="muted">—</span>{{end}}</td>
+        <td>{{if .IsAdmin}}<span class="badge ok">是</span>{{else}}<span class="badge">否</span>{{end}}</td>
+        <td>{{if .IsActive}}<span class="badge ok">启用</span>{{else}}<span class="badge warn">停用</span>{{end}}</td>
+        <td>{{formatDate .CreatedAt}}</td>
+        <td class="actions-col">
+          <a href="/admin/users/{{.ID}}/edit" class="btn sm">编辑</a>
+          <form method="post" action="/admin/users/{{.ID}}/delete" class="inline" onsubmit="return confirm('确认删除用户 {{.Username}}？其全部角色绑定将被一并移除。');">
+            <button type="submit" class="btn sm danger">删除</button>
+          </form>
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="empty">暂无用户。点击「新建用户」创建第一个管理员账户。</div>
+{{end}}
+{{end}}

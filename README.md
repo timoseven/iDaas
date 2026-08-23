@@ -1,70 +1,65 @@
-# iDaas - SAML 2.0 IdP + 阿里云 RAM 角色 SSO
+# iDaas — SAML 2.0 IdP + 阿里云 RAM 角色 SSO（Go 实现）
 
-一个独立的身份认证网站，**自身作为 SAML 2.0 Identity Provider**：多个本地账号 → 一个或多个阿里云 RAM 角色。用户登录网站后选择角色，站点签发已签名的 SAML Response 并自动 POST 到阿里云 ACS，免密进入控制台。
+一个独立的身份认证网站，**自身作为 SAML 2.0 Identity Provider**：多个本地账号 → 一个或多个阿里云 RAM 角色。用户登录网站后选择角色，站点用 X.509 私钥签发 SAML Response 并自动 POST 到阿里云 ACS，免密进入控制台。
 
-## 架构
-
-```
-                              ┌── 阿里云控制台
-                              │   (role: prod-readonly)
-   alice ──┐                  │
-   bob    ─┤  HTTPS SAML POST │
-           ▼                  ▼
-       [iDaas IdP] ──sign──> 阿里云 ACS (https://signin.aliyun.com/saml/SSO)
-           │
-           │ X.509 私钥 (certs/idp.key)
-           │
-       [SQLite：本地账号 + 角色 ARN 绑定]
-```
-
-- **同一 RAM 角色**可被多个本地用户共享；同一用户也可绑定多个角色，登录时自行选择
-- 站点用本地 `username/password` 认证，**完全不接触**用户的阿里云账号密码
 - 服务端**不需要任何阿里云 AK/SK**，仅持有 IdP 自己的 X.509 私钥用于签名
+- 同一 RAM 角色可被多个本地用户共享；同一用户也可绑定多个角色
+- 本地账号 `username/password` 认证，密码 bcrypt 哈希存储
 
 ## 技术栈
+- Go 1.22+（增强型 `net/http` ServeMux 路由，`html/template` + `embed.FS`）
+- `go.etcd.io/bbolt` —— 单文件 `.db` 二进制 KV 存储（B+tree，非 SQLite）
+- `github.com/crewjam/saml` + `github.com/russellhaering/goxmldsig` —— SAML 2.0 数据类型与 xmldsig 签名
+- `golang.org/x/crypto/bcrypt` —— 密码哈希
+- 纯原生 HTML/CSS/JS，无前端构建
 
-- Python 3.8+ / Flask 3 / SQLAlchemy / Flask-Login / Flask-WTF
-- `lxml` + `signxml` 用于构造和签名 SAML XML
-- SQLite（开箱即用，可换 PostgreSQL/MySQL）
-- 原生 HTML/CSS/JS 前端，无前端构建依赖
+## 架构
+```
+   alice ──┐
+   bob    ─┤  1. 登录 iDaas /login（本地账号）
+           ▼
+       [iDaas IdP:8088]   2. 选角色 → BuildResponse(username, roleARN)
+           │                 ├─ Assertion + Response 各做一次 enveloped rsa-sha256 签名
+           │ 3. base64(SAMLResponse) 自动 POST
+           ▼
+       阿里云 ACS  https://signin.aliyun.com/saml/SSO
+           │
+           ▼
+       阿里云控制台（以 RAM 角色身份）
+```
+存储：`idaas.db`（bbolt）。证书：`certs/idp.crt` + `certs/idp.key`。
 
 ## 目录结构
-
 ```
 iDaas/
-├── app/
-│   ├── __init__.py        # 应用工厂
-│   ├── config.py          # 环境变量加载（SAML_* 项）
-│   ├── models.py          # User / RamRole / UserRole
-│   ├── saml.py            # build_saml_response() + build_metadata() + load_idp_credentials()
-│   ├── saml_routes.py     # /saml/metadata 公开端点
-│   ├── auth.py            # /login /logout
-│   ├── user_portal.py     # / + /role/<id>/console (选角色 → POST SAMLResponse 到 ACS)
-│   ├── admin.py           # /admin/* 用户/角色 CRUD + 绑定管理
-│   ├── templates/         # base / login / portal/* / admin/*
-│   └── static/css/style.css
-├── certs/                 # IdP 证书私钥（管理员手动放置）
-│   ├── idp.crt
-│   └── idp.key
-├── manage.py              # CLI: initdb / createsuperuser / list-users / list-roles
-├── run.py                 # 启动入口（端口 8088）
-├── requirements.txt
+├── cmd/idaas/main.go          # 启动入口 + createsuperuser 子命令
+├── internal/
+│   ├── config/config.go       # 环境变量加载
+│   ├── models/models.go       # User / RamRole / UserRole / BindingView
+│   ├── store/store.go         # bbolt 存储层（用户/角色/绑定/会话 CRUD）
+│   ├── auth/auth.go           # 会话 + CSRF（双提交 cookie）+ bcrypt + 权限中间件
+│   ├── saml/idp.go            # SAML IdP：metadata 生成 + BuildResponse 签名
+│   └── webserver/             # HTTP 层（路由/模板/静态/flash）
+│       ├── server.go          # 路由注册 + 模板加载 + render
+│       ├── auth_routes.go     # /login /logout
+│       ├── portal.go          # / /role/{id}/console /saml/metadata
+│       ├── admin.go           # /admin/* 用户/角色/绑定 CRUD
+│       └── web/               # embed 资源：templates/ + static/css/
+├── certs/idp.crt, idp.key     # IdP 证书私钥（手动放置）
+├── docs/aliyun-setup.md       # 阿里云侧配置检查清单
 ├── .env.example
-└── instance/idaas.db      # 首次启动自动创建
+├── go.mod / go.sum
+└── README.md
 ```
 
 ## 快速开始
 
-### 1. 安装依赖
-
+### 1. 构建
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+go build -o idaas ./cmd/idaas
 ```
 
-### 2. 生成 IdP 证书（管理员手动）
-
+### 2. 生成 IdP 证书（仅一次）
 ```bash
 mkdir -p certs
 openssl req -x509 -newkey rsa:2048 \
@@ -73,93 +68,70 @@ openssl req -x509 -newkey rsa:2048 \
 chmod 600 certs/idp.key
 ```
 
-证书只需生成一次，长期使用；私钥必须保密（已加入 `.gitignore`）。
-
 ### 3. 配置环境变量
-
+config 从**进程环境变量**读取（不会自动解析 `.env` 文件）。推荐：
 ```bash
 cp .env.example .env
-# 编辑 .env，至少填入 SECRET_KEY
+# 编辑 .env，至少设置 SECRET_KEY 与 SAML_IDP_ARN
+set -a; . ./.env; set +a
 ```
-
 关键变量：
 
-| 变量 | 说明 |
-| --- | --- |
-| `SECRET_KEY` | Flask 会话签名密钥，生产必须改 |
-| `SAML_ENTITY_ID` | IdP EntityID，建议即 metadata URL |
-| `SAML_BASE_URL` | 站点对外 base URL（用于 metadata 中的 SSO endpoint Location） |
-| `SAML_ACS_URL` | 阿里云固定 ACS，默认 `https://signin.aliyun.com/saml/SSO`，无需改 |
-| `SAML_CERT_PATH` / `SAML_KEY_PATH` | IdP 证书与私钥路径 |
-| `SAML_IDP_ARN` | 阿里云侧创建 SAML IdP 后回填：`acs:ram::<主账号ID>:saml-provider/<IdP名>` |
-| `SAML_ASSERTION_VALID_MINUTES` | SAML Assertion 有效期（分钟），默认 5 |
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `LISTEN_ADDR` | `:8088` | 监听地址 |
+| `DB_PATH` | `idaas.db` | bbolt 数据库路径 |
+| `SECRET_KEY` | dev 值 | 会话相关；生产必须改为强随机 |
+| `SAML_ENTITY_ID` | `http://localhost:8088/saml/metadata` | IdP EntityID |
+| `SAML_BASE_URL` | `http://localhost:8088` | 站点对外 base URL |
+| `SAML_ACS_URL` | `https://signin.aliyun.com/saml/SSO` | 阿里云 ACS，勿改 |
+| `SAML_CERT_PATH` / `SAML_KEY_PATH` | `certs/idp.crt` / `certs/idp.key` | IdP 证书/私钥 |
+| `SAML_IDP_ARN` | 空 | 阿里云侧创建 IdP 后回填，详见 [docs/aliyun-setup.md](docs/aliyun-setup.md) |
+| `SAML_ASSERTION_VALID_MINUTES` | `5` | Assertion 有效期 |
 
-### 4. 初始化数据库 + 创建管理员
-
+### 4. 创建管理员
 ```bash
-python3 manage.py initdb
-python3 manage.py createsuperuser
-# 交互输入用户名/密码/邮箱；或非交互：
-python3 manage.py createsuperuser --username admin --password <pwd> --email a@b.com
+./idaas createsuperuser -username admin -password <pwd> -email a@b.com -display-name Admin
+# 或交互式输入：./idaas createsuperuser
 ```
 
-### 5. 启动服务
-
+### 5. 启动
 ```bash
-python3 run.py    # http://localhost:8088/login
+./idaas    # http://localhost:8088/login
 ```
-
-生产部署建议用 gunicorn：
-
-```bash
-pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:8088 run:app
-```
+生产部署建议置于 HTTPS 反向代理之后，并用 systemd 管理进程（`EnvironmentFile=.env`）。
 
 ## 阿里云侧配置（一次性）
-
-1. 启动 iDaas 后访问 `https://your-domain/saml/metadata` 拿到 IdP metadata XML
-2. 阿里云 RAM 控制台 → **SSO 管理** → **SAML** → **角色 SSO** → **创建 IdP**
-   - 上传 metadata 文件（或粘贴 URL）
-   - 记录生成的 **IdP ARN**：`acs:ram::<主账号ID>:saml-provider/idaas`
-3. RAM 控制台 → **角色** → **创建角色** → 受信实体选 **身份提供商**
-   - 选择上面创建的 IdP，完成角色创建
-   - 复制 **角色 ARN**：`acs:ram::<主账号ID>:role/<role-name>`
-   - 给角色附加合适的权限策略（AliyunRAMFullAccess / OSS ReadOnly 等）
-4. 将 IdP ARN 回填到 iDaas 的 `.env` 中 `SAML_IDP_ARN`
-5. 重启 iDaas，在管理后台 → RAM 角色管理 → 添加角色，把上面角色 ARN 录入
-6. 用户管理 → 新建本地用户 → 编辑用户 → 绑定刚创建的角色
+见 [docs/aliyun-setup.md](docs/aliyun-setup.md) 检查清单。要点：
+1. 访问 `/saml/metadata` 取 IdP metadata XML
+2. 阿里云 RAM → SSO → 创建 IdP（上传 metadata）→ 记录 **IdP ARN**
+3. 回填 `SAML_IDP_ARN` 并重启
+4. RAM → 创建角色（受信实体=身份提供商）→ 记录 **角色 ARN** → 附加权限策略
+5. iDaas 后台 → RAM 角色管理登记角色 → 用户管理绑定用户
 
 ## 用户使用流程
-
-1. 普通用户访问 `/login`，输入用户名密码登录
-2. 门户首页 `/` 列出其绑定的 RAM 角色卡片
-3. 点击「进入阿里云控制台」→ 浏览器自动 POST SAMLResponse 到阿里云 ACS
-4. 阿里云校验签名、扮演对应 RAM 角色，重定向到控制台首页
-5. 用户在控制台的所有操作都以该 RAM 角色身份进行
+1. 普通用户 `/login` 输入用户名密码
+2. 门户 `/` 列出已绑定角色
+3. 点击「登录控制台」→ 浏览器自动 POST `SAMLResponse` 到阿里云 ACS
+4. 阿里云校验签名、扮演 RAM 角色，进入控制台
 
 ## SAML Response 关键字段
-
 - `Issuer` = IdP EntityID
-- `NameID` = 网站用户名（即阿里云会话标识）
+- `NameID` = 网站用户名
 - `Attribute: https://www.aliyun.com/SAML-Role/Attributes/Role` = `<IdP-ARN>,<Role-ARN>`
 - `Attribute: https://www.aliyun.com/SAML-Role/Attributes/RoleSessionName` = 用户名
-- 用 X.509 私钥对 Response 与 Assertion 各做一次 enveloped xmldsig 签名（rsa-sha256 + sha256）
+- Response 与 Assertion 各一次 enveloped xmldsig 签名（rsa-sha256 + sha256）
 
-## CLI 命令
-
+## CLI
 ```bash
-python3 manage.py initdb              # 初始化数据库表
-python3 manage.py createsuperuser    # 创建管理员
-python3 manage.py changepassword <u> # 改某用户密码
-python3 manage.py list-users         # 列出用户
-python3 manage.py list-roles         # 列出 RAM 角色
+./idaas                       # 启动 HTTP 服务
+./idaas createsuperuser [...]  # 创建管理员（支持 -username/-password/-email/-display-name/-db）
 ```
 
 ## 安全说明
-
-- 服务端不存储任何阿里云 AK/SK，认证完全依赖 SAML 签名
-- SAML Assertion 默认 5 分钟有效期，过期后阿里云会拒绝重放
-- `/saml/metadata` 是公开只读端点，可被阿里云拉取；私钥不会出现在 metadata 中
-- 所有 POST 表单启用 CSRF；测试模式 `TESTING=True` 会自动关闭
-- 用户管理面板支持停用账号、解绑角色；最后一个管理员账号无法被删除或降级
+- 服务端不存任何阿里云 AK/SK，认证完全依赖 SAML 签名
+- 密码 bcrypt 哈希；会话存于 bbolt，cookie 仅持随机 session_id（HttpOnly）
+- 所有写请求启用 CSRF（双提交 cookie 模式）
+- `/saml/metadata` 公开只读；私钥不会出现在 metadata 中
+- 最后一个管理员账户无法被删除或降级；不能删除当前登录的管理员
+- Assertion 默认 5 分钟有效期，过期后阿里云拒绝重放

@@ -1,0 +1,47 @@
+{{define "base"}}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{block "title" .}}iDaas{{end}}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app">
+    {{if .User}}
+    <aside class="sidebar">
+      <div class="brand">iDaas</div>
+      <nav>
+        <a href="/" class="{{if eq .CurrentURL "/"}}active{{end}}">控制台</a>
+        {{if .User.IsAdmin}}
+        <a href="/admin" class="{{if hasPrefix .CurrentURL "/admin"}}active{{end}}">管理</a>
+        <a href="/admin/users">用户</a>
+        <a href="/admin/roles">RAM 角色</a>
+        {{end}}
+        <a href="/logout" class="muted">退出 ({{.User.Username}})</a>
+      </nav>
+    </aside>
+    {{end}}
+    <main class="content">
+      {{if .Flash}}<div class="flash {{.FlashKind}}">{{.Flash}}</div>{{end}}
+      {{block "content" .}}{{end}}
+    </main>
+  </div>
+  <script>
+    // 为所有本站 POST 表单注入 CSRF token（自动跳过提交给阿里云的 SAML 表单）
+    document.addEventListener('DOMContentLoaded', function () {
+      var tok = "{{.CSRFToken}}";
+      document.querySelectorAll('form').forEach(function (f) {
+        if (f.method.toLowerCase() !== 'post') return;
+        if (f.querySelector('input[name="csrf_token"]')) return;
+        if (f.querySelector('input[name="SAMLResponse"]')) return;
+        var i = document.createElement('input');
+        i.type = 'hidden'; i.name = 'csrf_token'; i.value = tok;
+        f.appendChild(i);
+      });
+    });
+  </script>
+</body>
+</html>
+{{end}}

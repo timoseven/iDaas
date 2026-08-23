@@ -1,0 +1,27 @@
+{{define "title"}}{{if .Role}}编辑角色{{else}}新建角色{{end}} - iDaas{{end}}
+{{define "content"}}
+<div class="page-head">
+  <h2>{{if .Role}}编辑角色{{else}}新建角色{{end}}</h2>
+</div>
+{{if .Error}}<div class="flash error">{{.Error}}</div>{{end}}
+<form method="post" action="{{.Action}}" class="form">
+  <fieldset>
+    <label>名称
+      <input type="text" name="name" value="{{.Form.Name}}" required>
+      <small>站点内用于显示的名称，可自定义</small>
+    </label>
+    <label>ARN
+      <input type="text" name="arn" value="{{.Form.ARN}}" required>
+      <small>阿里云 RAM 角色 ARN，形如 acs:ram::1234567890123456:role/saml-role</small>
+    </label>
+    <label>说明
+      <input type="text" name="description" value="{{.Form.Description}}">
+    </label>
+    <label class="checkbox"><input type="checkbox" name="is_active" value="1" {{if .Form.IsActive}}checked{{end}}> 启用</label>
+  </fieldset>
+  <div class="form-actions">
+    <button type="submit" class="btn primary">{{if .Role}}保存{{else}}创建{{end}}</button>
+    <a href="/admin/roles" class="btn">取消</a>
+  </div>
+</form>
+{{end}}

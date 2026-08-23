@@ -1,0 +1,11 @@
+{{define "title"}}跳转中...{{end}}
+{{define "content"}}
+<div class="redirecting">
+  <p>正在跳转到阿里云控制台，请稍候...</p>
+  <form id="samlForm" method="post" action="{{.ACSURL}}">
+    <input type="hidden" name="SAMLResponse" value="{{.SAMLResponse}}">
+  </form>
+  <noscript><button type="submit" form="samlForm" class="btn primary">继续</button></noscript>
+</div>
+<script>(function(){document.getElementById('samlForm').submit();})();</script>
+{{end}}

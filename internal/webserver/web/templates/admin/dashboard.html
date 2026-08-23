@@ -1,0 +1,26 @@
+{{define "title"}}管理概览 - iDaas{{end}}
+{{define "content"}}
+<div class="page-head">
+  <h2>管理概览</h2>
+</div>
+<div class="stat-grid">
+  <a class="stat-card" href="/admin/users">
+    <div class="n">{{.Stats.Users}}</div><div class="l">用户</div>
+  </a>
+  <a class="stat-card" href="/admin/roles">
+    <div class="n">{{.Stats.Roles}}</div><div class="l">RAM 角色</div>
+  </a>
+  <div class="stat-card">
+    <div class="n">{{.Stats.Bindings}}</div><div class="l">角色绑定</div>
+  </div>
+  <div class="stat-card">
+    <div class="n">{{.Stats.Admins}}</div><div class="l">管理员</div>
+  </div>
+</div>
+<div class="page-head"><h3>快捷操作</h3></div>
+<div class="actions">
+  <a href="/admin/users/new" class="btn primary">新建用户</a>
+  <a href="/admin/roles/new" class="btn primary">新建角色</a>
+  <a href="/saml/metadata" class="btn" target="_blank">查看 SAML Metadata</a>
+</div>
+{{end}}
