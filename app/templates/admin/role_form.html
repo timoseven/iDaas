@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'create' %}添加 RAM 角色{% else %}编辑 RAM 角色：{{ role.name }}{% endif %} · iDaas{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1>{% if mode == 'create' %}添加 RAM 角色{% else %}编辑 RAM 角色：{{ role.name }}{% endif %}</h1>
+</div>
+
+<form method="post" class="form-card">
+    <div class="form-row">
+        <label class="field">
+            <span>角色名（站点内显示）</span>
+            <input type="text" name="name" required
+                   value="{{ (role and role.name) or (form and form.get('name')) or '' }}">
+        </label>
+        <label class="field">
+            <span>启用</span>
+            <label class="field-check"><input type="checkbox" name="is_active"
+                {% if mode == 'create' or (role and role.is_active) or (form and form.get('is_active')) %}checked{% endif %}> 启用该角色</label>
+        </label>
+    </div>
+    <label class="field">
+        <span>角色 ARN</span>
+        <input type="text" name="arn" required placeholder="acs:ram::1234567890:role/MyRole"
+               value="{{ (role and role.arn) or (form and form.get('arn')) or '' }}">
+        <small class="field-hint">在阿里云 RAM 控制台 → 角色 → 角色详情中可复制 ARN（信任策略需选择本 IdP）</small>
+    </label>
+    <label class="field">
+        <span>描述</span>
+        <input type="text" name="description" placeholder="该角色的用途"
+               value="{{ (role and role.description) or (form and form.get('description')) or '' }}">
+    </label>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{% if mode == 'create' %}创建{% else %}保存{% endif %}</button>
+        <a href="{{ url_for('admin.role_list') }}" class="btn btn-ghost">取消</a>
+    </div>
+</form>
+{% endblock %}

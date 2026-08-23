@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}用户管理 · iDaas{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1>用户管理</h1>
+    <div class="page-head-actions">
+        <a href="{{ url_for('admin.user_create') }}" class="btn btn-primary">+ 添加用户</a>
+    </div>
+</div>
+
+<form method="get" class="search-bar">
+    <input type="text" name="q" value="{{ q }}" placeholder="搜索用户名或显示名">
+    <button type="submit" class="btn btn-secondary">搜索</button>
+    {% if q %}<a href="{{ url_for('admin.user_list') }}" class="btn btn-ghost">重置</a>{% endif %}
+</form>
+
+<table class="data-table">
+    <thead>
+    <tr>
+        <th>ID</th>
+        <th>用户名</th>
+        <th>显示名</th>
+        <th>邮箱</th>
+        <th>角色数</th>
+        <th>管理员</th>
+        <th>启用</th>
+        <th>创建时间</th>
+        <th>操作</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for u in users %}
+    <tr>
+        <td>{{ u.id }}</td>
+        <td><strong>{{ u.username }}</strong></td>
+        <td>{{ u.display_name or '—' }}</td>
+        <td>{{ u.email or '—' }}</td>
+        <td>{{ u.roles|length }}</td>
+        <td>{% if u.is_admin %}<span class="tag tag-ok">是</span>{% else %}<span class="tag tag-off">否</span>{% endif %}</td>
+        <td>{% if u.is_active %}<span class="tag tag-ok">启用</span>{% else %}<span class="tag tag-off">停用</span>{% endif %}</td>
+        <td>{{ u.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td class="row-actions">
+            <a href="{{ url_for('admin.user_edit', user_id=u.id) }}" class="btn btn-sm btn-secondary">编辑</a>
+            <form method="post" action="{{ url_for('admin.user_delete', user_id=u.id) }}"
+                  onsubmit="return confirm('确认删除用户 {{ u.username }}？此操作会同时解除其所有角色绑定。');" style="display:inline">
+                <button type="submit" class="btn btn-sm btn-danger">删除</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    {% if not users %}
+    <tr><td colspan="9" class="empty-cell">暂无用户</td></tr>
+    {% endif %}
+    </tbody>
+</table>
+{% endblock %}

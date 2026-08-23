@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}登录 · iDaas{% endblock %}
+
+{% block layout %}
+<div class="auth-screen">
+    <div class="auth-card">
+        <div class="auth-brand">
+            <div class="brand-mark-lg">iD</div>
+            <h1>iDaas 控制台</h1>
+            <p class="auth-sub">通过阿里云 RAM Role 安全登录云控制台</p>
+        </div>
+        <form method="post" class="auth-form">
+            <label class="field">
+                <span>用户名</span>
+                <input type="text" name="username" value="{{ username or '' }}" autofocus required autocomplete="username">
+            </label>
+            <label class="field">
+                <span>密码</span>
+                <input type="password" name="password" required autocomplete="current-password">
+            </label>
+            <label class="field-check">
+                <input type="checkbox" name="remember"> 记住我
+            </label>
+            <button type="submit" class="btn btn-primary btn-block">登录</button>
+        </form>
+        <p class="auth-foot">本系统由阿里云 STS 临时凭证授权，不会保存您的云账号密码</p>
+    </div>
+</div>
+{% endblock %}

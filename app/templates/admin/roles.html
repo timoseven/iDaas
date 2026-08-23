@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}RAM 角色管理 · iDaas{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1>RAM 角色管理</h1>
+    <div class="page-head-actions">
+        <a href="{{ url_for('saml.metadata') }}" target="_blank" class="btn btn-secondary">查看 IdP Metadata</a>
+        <a href="{{ url_for('admin.role_create') }}" class="btn btn-primary">+ 添加角色</a>
+    </div>
+</div>
+
+<form method="get" class="search-bar">
+    <input type="text" name="q" value="{{ q }}" placeholder="搜索角色名或 ARN">
+    <button type="submit" class="btn btn-secondary">搜索</button>
+    {% if q %}<a href="{{ url_for('admin.role_list') }}" class="btn btn-ghost">重置</a>{% endif %}
+</form>
+
+<table class="data-table">
+    <thead>
+    <tr>
+        <th>ID</th>
+        <th>角色名</th>
+        <th>ARN</th>
+        <th>描述</th>
+        <th>绑定用户</th>
+        <th>启用</th>
+        <th>操作</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for r in roles %}
+    <tr>
+        <td>{{ r.id }}</td>
+        <td><strong>{{ r.name }}</strong></td>
+        <td class="mono">{{ r.arn }}</td>
+        <td>{{ r.description or '—' }}</td>
+        <td>{{ r.users|length }}</td>
+        <td>{% if r.is_active %}<span class="tag tag-ok">启用</span>{% else %}<span class="tag tag-off">停用</span>{% endif %}</td>
+        <td class="row-actions">
+            <a href="{{ url_for('admin.role_edit', role_id=r.id) }}" class="btn btn-sm btn-secondary">编辑</a>
+            <form method="post" action="{{ url_for('admin.role_delete', role_id=r.id) }}"
+                  onsubmit="return confirm('确认删除角色 {{ r.name }}？所有用户的绑定会一并解除。');" style="display:inline">
+                <button type="submit" class="btn btn-sm btn-danger">删除</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    {% if not roles %}
+    <tr><td colspan="7" class="empty-cell">暂无 RAM 角色</td></tr>
+    {% endif %}
+    </tbody>
+</table>
+{% endblock %}

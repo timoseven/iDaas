@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}管理后台 · iDaas{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1>管理后台</h1>
+    <p class="page-sub">iDaas 站点概览，从这里管理网站账号和阿里云 RAM 角色绑定</p>
+</div>
+
+<div class="stat-grid">
+    <a href="{{ url_for('admin.user_list') }}" class="stat-card">
+        <div class="stat-value">{{ stats.users }}</div>
+        <div class="stat-label">网站用户</div>
+    </a>
+    <a href="{{ url_for('admin.role_list') }}" class="stat-card">
+        <div class="stat-value">{{ stats.roles }}</div>
+        <div class="stat-label">RAM 角色</div>
+    </a>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.bindings }}</div>
+        <div class="stat-label">用户-角色绑定</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.admins }}</div>
+        <div class="stat-label">管理员</div>
+    </div>
+</div>
+
+<div class="quick-actions">
+    <a href="{{ url_for('admin.user_create') }}" class="btn btn-primary">添加用户</a>
+    <a href="{{ url_for('admin.role_create') }}" class="btn btn-secondary">添加 RAM 角色</a>
+</div>
+{% endblock %}
