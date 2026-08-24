@@ -48,10 +48,8 @@ func runServer() error {
 	idp, err := saml.New(saml.Config{
 		EntityID:  cfg.SAMLEntityID,
 		BaseURL:   cfg.SAMLBaseURL,
-		ACSURL:    cfg.SAMLACSURL,
 		CertPath:  cfg.SAMLCertPath,
 		KeyPath:   cfg.SAMLKeyPath,
-		IdpARN:    cfg.SAMLIdpARN,
 		ValidMins: cfg.SAMLValidMins,
 		OrgName:   cfg.SAMLOrgName,
 		OrgDisp:   cfg.SAMLOrgDisp,
@@ -67,9 +65,6 @@ func runServer() error {
 		return err
 	}
 
-	if cfg.SAMLIdpARN == "" {
-		fmt.Fprintln(os.Stderr, "警告：SAML_IDP_ARN 未配置；角色控制台登录将在阿里云侧创建 SAML IdP 并填入 ARN 后可用。")
-	}
 	fmt.Printf("iDaas 监听 %s（数据库 %s）\n", cfg.ListenAddr, cfg.DBPath)
 	fmt.Printf("SAML metadata: %s\n", cfg.SAMLEntityID)
 

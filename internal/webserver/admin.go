@@ -8,6 +8,7 @@ import (
 
 	"idaas/internal/auth"
 	"idaas/internal/models"
+	"idaas/internal/saml"
 	"idaas/internal/store"
 )
 
@@ -23,7 +24,9 @@ type userForm struct {
 // roleForm 用于 role_form.html 的表单回显
 type roleForm struct {
 	Name        string
+	Cloud       string
 	ARN         string
+	ProviderARN string
 	Description string
 	IsActive    bool
 }
@@ -309,10 +312,12 @@ func (s *Server) adminRolesList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminRoleForm(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	cloudOpts := saml.CloudOptions()
 	if id == "" {
 		s.render(w, r, "admin/role_form", map[string]any{
-			"Action": "/admin/roles/new",
-			"Form":   roleForm{IsActive: true},
+			"Action":       "/admin/roles/new",
+			"Form":         roleForm{Cloud: string(saml.CloudAliyun), IsActive: true},
+			"CloudOptions": cloudOpts,
 		})
 		return
 	}
@@ -327,9 +332,10 @@ func (s *Server) adminRoleForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.render(w, r, "admin/role_form", map[string]any{
-		"Role":   role,
-		"Action": "/admin/roles/" + id + "/edit",
-		"Form":   roleForm{Name: role.Name, ARN: role.ARN, Description: role.Description, IsActive: role.IsActive},
+		"Role":         role,
+		"Action":       "/admin/roles/" + id + "/edit",
+		"Form":         roleForm{Name: role.Name, Cloud: role.Cloud, ARN: role.ARN, ProviderARN: role.ProviderARN, Description: role.Description, IsActive: role.IsActive},
+		"CloudOptions": cloudOpts,
 	})
 }
 
@@ -339,20 +345,33 @@ func (s *Server) adminRoleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := readRoleForm(r)
+	cloudOpts := saml.CloudOptions()
 	renderErr := func(msg string) {
 		s.render(w, r, "admin/role_form", map[string]any{
-			"Action": "/admin/roles/new",
-			"Form":   f,
-			"Error":  msg,
+			"Action":       "/admin/roles/new",
+			"Form":         f,
+			"CloudOptions": cloudOpts,
+			"Error":        msg,
 		})
 	}
 	if strings.TrimSpace(f.Name) == "" || strings.TrimSpace(f.ARN) == "" {
 		renderErr("名称和 ARN 不能为空")
 		return
 	}
+	spec, ok := saml.LookupCloud(saml.Cloud(f.Cloud))
+	if !ok {
+		renderErr("请选择有效的云厂商")
+		return
+	}
+	if spec.NeedsProviderARN && strings.TrimSpace(f.ProviderARN) == "" {
+		renderErr(spec.Label + " 需要填写 " + spec.ProviderLabel)
+		return
+	}
 	role := &models.RamRole{
 		Name:        strings.TrimSpace(f.Name),
+		Cloud:       strings.TrimSpace(f.Cloud),
 		ARN:         strings.TrimSpace(f.ARN),
+		ProviderARN: strings.TrimSpace(f.ProviderARN),
 		Description: strings.TrimSpace(f.Description),
 		IsActive:    f.IsActive,
 	}
@@ -384,20 +403,33 @@ func (s *Server) adminRoleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := readRoleForm(r)
+	cloudOpts := saml.CloudOptions()
 	renderErr := func(msg string) {
 		s.render(w, r, "admin/role_form", map[string]any{
-			"Role":   existing,
-			"Action": "/admin/roles/" + r.PathValue("id") + "/edit",
-			"Form":   f,
-			"Error":  msg,
+			"Role":         existing,
+			"Action":       "/admin/roles/" + r.PathValue("id") + "/edit",
+			"Form":         f,
+			"CloudOptions": cloudOpts,
+			"Error":        msg,
 		})
 	}
 	if strings.TrimSpace(f.Name) == "" || strings.TrimSpace(f.ARN) == "" {
 		renderErr("名称和 ARN 不能为空")
 		return
 	}
+	spec, ok := saml.LookupCloud(saml.Cloud(f.Cloud))
+	if !ok {
+		renderErr("请选择有效的云厂商")
+		return
+	}
+	if spec.NeedsProviderARN && strings.TrimSpace(f.ProviderARN) == "" {
+		renderErr(spec.Label + " 需要填写 " + spec.ProviderLabel)
+		return
+	}
 	existing.Name = strings.TrimSpace(f.Name)
+	existing.Cloud = strings.TrimSpace(f.Cloud)
 	existing.ARN = strings.TrimSpace(f.ARN)
+	existing.ProviderARN = strings.TrimSpace(f.ProviderARN)
 	existing.Description = strings.TrimSpace(f.Description)
 	existing.IsActive = f.IsActive
 	if err := s.store.UpdateRole(existing); err != nil {
@@ -459,7 +491,9 @@ func readUserForm(r *http.Request) formPayload {
 func readRoleForm(r *http.Request) roleForm {
 	return roleForm{
 		Name:        r.FormValue("name"),
+		Cloud:       r.FormValue("cloud"),
 		ARN:         r.FormValue("arn"),
+		ProviderARN: r.FormValue("provider_arn"),
 		Description: r.FormValue("description"),
 		IsActive:    r.FormValue("is_active") == "1",
 	}

@@ -1,10 +1,13 @@
-# iDaas — SAML 2.0 IdP + 阿里云 RAM 角色 SSO（Go 实现）
+# iDaas — 多云 SAML 2.0 IdP（Go 实现）
 
-一个独立的身份认证网站，**自身作为 SAML 2.0 Identity Provider**：多个本地账号 → 一个或多个阿里云 RAM 角色。用户登录网站后选择角色，站点用 X.509 私钥签发 SAML Response 并自动 POST 到阿里云 ACS，免密进入控制台。
+一个独立的身份认证网站，**自身作为 SAML 2.0 Identity Provider**：本地账号 → 一个或多个云厂商角色。用户登录站点后选择角色，站点用 X.509 私钥签发 SAML Response 并自动 POST 到对应云的 ACS，免密进入控制台。
 
-- 服务端**不需要任何阿里云 AK/SK**，仅持有 IdP 自己的 X.509 私钥用于签名
-- 同一 RAM 角色可被多个本地用户共享；同一用户也可绑定多个角色
+内置 6 个云预设（阿里云 / 腾讯云 / AWS / 火山引擎 / Azure / Google GCP），各云的 ACS URL、SAML 属性名、Role 属性值拼接顺序均已内置，新建角色时选择云厂商即可。
+
+- 服务端**不需要任何云厂商 AK/SK / AccessKey**，仅持有 IdP 自己的 X.509 私钥用于签名
+- 同一角色可被多个本地用户共享；同一用户可绑定多个云的多个角色
 - 本地账号 `username/password` 认证，密码 bcrypt 哈希存储
+- 协议相同（SAML 2.0 + rsa-sha256 enveloped 双签名），各云差异在 Attribute 与 ACS
 
 ## 技术栈
 - Go 1.22+（增强型 `net/http` ServeMux 路由，`html/template` + `embed.FS`）
@@ -13,19 +16,35 @@
 - `golang.org/x/crypto/bcrypt` —— 密码哈希
 - 纯原生 HTML/CSS/JS，无前端构建
 
+## 支持的云厂商
+
+| 云 | 标识 | ACS URL | Role 属性值拼接顺序 | 是否需 Provider |
+| --- | --- | --- | --- | --- |
+| 阿里云 | `aliyun` | `https://signin.aliyun.com/saml/SSO` | `<IdP-ARN>,<Role-ARN>` | 是（IdP ARN） |
+| 腾讯云 | `tencent` | `https://cloud.tencent.com/saml/sso` | `<Role-ARN>,<Provider>` | 是（SAML Provider） |
+| AWS | `aws` | `https://signin.aws.amazon.com/saml` | `<Role-ARN>,<Principal-ARN>` | 是（Principal / SAML Provider ARN） |
+| 火山引擎 | `volc` | `https://signin.volcengine.com/saml/SSO` | `<Provider>,<Role-ARN>` | 是（Trusted Principal） |
+| Azure | `azure` | `https://login.microsoftonline.com/<tenant>/saml2` | 无 Role 属性（NameID 登录） | 否 |
+| Google GCP | `gcp` | `https://www.googleapis.com/cloud-identity/saml/acs` | 无 Role 属性（Workforce Pool） | 否 |
+
+> Azure/GCP 仅以 NameID 作为联合身份，应用侧 / Workforce Pool 决定权限，无需 Role 扮演属性；在 iDaas 角色表单中 Provider ARN 留空即可。
+
+规格定义见 [internal/saml/clouds.go](internal/saml/clouds.go)，新增云只需在 `clouds` 注册表加一项。
+
 ## 架构
 ```
    alice ──┐
    bob    ─┤  1. 登录 iDaas /login（本地账号）
            ▼
-       [iDaas IdP:8088]   2. 选角色 → BuildResponse(username, roleARN)
+       [iDaas IdP:8088]   2. 选角色 → BuildResponse(username, Role{Cloud,ARN,ProviderARN})
+           │                 ├─ 按 role.Cloud 派发 ACS / 属性名 / Role 值顺序
            │                 ├─ Assertion + Response 各做一次 enveloped rsa-sha256 签名
            │ 3. base64(SAMLResponse) 自动 POST
            ▼
-       阿里云 ACS  https://signin.aliyun.com/saml/SSO
+       对应云 ACS（如 AWS https://signin.aws.amazon.com/saml）
            │
            ▼
-       阿里云控制台（以 RAM 角色身份）
+       云控制台（以对应角色身份）
 ```
 存储：`idaas.db`（bbolt）。证书：`certs/idp.crt` + `certs/idp.key`。
 
@@ -38,15 +57,17 @@ iDaas/
 │   ├── models/models.go       # User / RamRole / UserRole / BindingView
 │   ├── store/store.go         # bbolt 存储层（用户/角色/绑定/会话 CRUD）
 │   ├── auth/auth.go           # 会话 + CSRF（双提交 cookie）+ bcrypt + 权限中间件
-│   ├── saml/idp.go            # SAML IdP：metadata 生成 + BuildResponse 签名
+│   ├── saml/
+│   │   ├── clouds.go          # 6 云规格预设（ACS / 属性名 / 拼接顺序）
+│   │   └── idp.go             # SAML IdP：metadata + BuildResponse 派发签名
 │   └── webserver/             # HTTP 层（路由/模板/静态/flash）
-│       ├── server.go          # 路由注册 + 模板加载 + render
+│       ├── server.go          # 路由注册 + 模板加载 + render + cloudLabel FuncMap
 │       ├── auth_routes.go     # /login /logout
-│       ├── portal.go          # / /role/{id}/console /saml/metadata
-│       ├── admin.go           # /admin/* 用户/角色/绑定 CRUD
+│       ├── portal.go          # / /role/{id}/console /saml/metadata（按云分组）
+│       ├── admin.go           # /admin/* 用户/角色/绑定 CRUD（含 cloud / provider_arn）
 │       └── web/               # embed 资源：templates/ + static/css/
 ├── certs/idp.crt, idp.key     # IdP 证书私钥（手动放置）
-├── docs/aliyun-setup.md       # 阿里云侧配置检查清单
+├── docs/aliyun-setup.md       # 阿里云侧配置检查清单（其他云可类比）
 ├── .env.example
 ├── go.mod / go.sum
 └── README.md
@@ -72,7 +93,7 @@ chmod 600 certs/idp.key
 config 从**进程环境变量**读取（不会自动解析 `.env` 文件）。推荐：
 ```bash
 cp .env.example .env
-# 编辑 .env，至少设置 SECRET_KEY 与 SAML_IDP_ARN
+# 编辑 .env，至少设置 SECRET_KEY
 set -a; . ./.env; set +a
 ```
 关键变量：
@@ -84,10 +105,10 @@ set -a; . ./.env; set +a
 | `SECRET_KEY` | dev 值 | 会话相关；生产必须改为强随机 |
 | `SAML_ENTITY_ID` | `http://localhost:8088/saml/metadata` | IdP EntityID |
 | `SAML_BASE_URL` | `http://localhost:8088` | 站点对外 base URL |
-| `SAML_ACS_URL` | `https://signin.aliyun.com/saml/SSO` | 阿里云 ACS，勿改 |
 | `SAML_CERT_PATH` / `SAML_KEY_PATH` | `certs/idp.crt` / `certs/idp.key` | IdP 证书/私钥 |
-| `SAML_IDP_ARN` | 空 | 阿里云侧创建 IdP 后回填，详见 [docs/aliyun-setup.md](docs/aliyun-setup.md) |
 | `SAML_ASSERTION_VALID_MINUTES` | `5` | Assertion 有效期 |
+
+> 各云的 ACS URL 与 SAML 属性规格内置在代码中（见上表），无需在环境变量配置；IdP/Provider/Principal ARN 按角色在后台表单填写。
 
 ### 4. 创建管理员
 ```bash
@@ -101,25 +122,25 @@ set -a; . ./.env; set +a
 ```
 生产部署建议置于 HTTPS 反向代理之后，并用 systemd 管理进程（`EnvironmentFile=.env`）。
 
-## 阿里云侧配置（一次性）
-见 [docs/aliyun-setup.md](docs/aliyun-setup.md) 检查清单。要点：
+## 云侧配置（每个云一次性）
+通用步骤（以阿里云为例，详见 [docs/aliyun-setup.md](docs/aliyun-setup.md)；其他云类比）：
 1. 访问 `/saml/metadata` 取 IdP metadata XML
-2. 阿里云 RAM → SSO → 创建 IdP（上传 metadata）→ 记录 **IdP ARN**
-3. 回填 `SAML_IDP_ARN` 并重启
-4. RAM → 创建角色（受信实体=身份提供商）→ 记录 **角色 ARN** → 附加权限策略
-5. iDaas 后台 → RAM 角色管理登记角色 → 用户管理绑定用户
+2. 在云控制台创建/登记 SAML IdP（上传 metadata）→ 记录 **IdP/Provider/Principal ARN**（Azure/GCP 无此项）
+3. 在云控制台创建扮演角色 / 联合应用 → 记录 **角色 ARN**（Azure 为应用 Entity ID，GCP 为 Workforce Pool Provider ID）
+4. iDaas 后台 → 角色管理 → 新建角色：选择**云厂商**，填入角色 ARN 与 Provider ARN → 用户管理绑定用户
 
 ## 用户使用流程
 1. 普通用户 `/login` 输入用户名密码
-2. 门户 `/` 列出已绑定角色
-3. 点击「登录控制台」→ 浏览器自动 POST `SAMLResponse` 到阿里云 ACS
-4. 阿里云校验签名、扮演 RAM 角色，进入控制台
+2. 门户 `/` 按**云分组**列出已绑定角色
+3. 点击「登录控制台」→ 浏览器自动 POST `SAMLResponse` 到对应云 ACS
+4. 云校验签名、扮演角色，进入控制台
 
-## SAML Response 关键字段
+## SAML Response 关键字段（按云派发）
 - `Issuer` = IdP EntityID
 - `NameID` = 网站用户名
-- `Attribute: https://www.aliyun.com/SAML-Role/Attributes/Role` = `<IdP-ARN>,<Role-ARN>`
-- `Attribute: https://www.aliyun.com/SAML-Role/Attributes/RoleSessionName` = 用户名
+- `Destination` = 对应云 ACS URL
+- Role 属性（阿里云 / 腾讯云 / AWS / 火山引擎）：属性名与值拼接顺序见上表（如 AWS 为 `<Role-ARN>,<Principal-ARN>`，与阿里云顺序相反）
+- Azure / GCP：仅 NameID，无 Role 属性
 - Response 与 Assertion 各一次 enveloped xmldsig 签名（rsa-sha256 + sha256）
 
 ## CLI
@@ -129,9 +150,9 @@ set -a; . ./.env; set +a
 ```
 
 ## 安全说明
-- 服务端不存任何阿里云 AK/SK，认证完全依赖 SAML 签名
+- 服务端不存任何云厂商 AK/SK / AccessKey，认证完全依赖 SAML 签名
 - 密码 bcrypt 哈希；会话存于 bbolt，cookie 仅持随机 session_id（HttpOnly）
 - 所有写请求启用 CSRF（双提交 cookie 模式）
 - `/saml/metadata` 公开只读；私钥不会出现在 metadata 中
 - 最后一个管理员账户无法被删除或降级；不能删除当前登录的管理员
-- Assertion 默认 5 分钟有效期，过期后阿里云拒绝重放
+- Assertion 默认 5 分钟有效期，过期后云拒绝重放

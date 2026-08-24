@@ -10,9 +10,21 @@
       <input type="text" name="name" value="{{.Form.Name}}" required>
       <small>站点内用于显示的名称，可自定义</small>
     </label>
-    <label>ARN
+    <label>云厂商
+      <select name="cloud">
+        {{range .CloudOptions}}
+        <option value="{{.Value}}" {{if eq $.Form.Cloud .Value}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+      <small>决定 ACS URL、SAML 属性名与 Role 属性拼接顺序</small>
+    </label>
+    <label>角色标识 (ARN)
       <input type="text" name="arn" value="{{.Form.ARN}}" required>
-      <small>阿里云 RAM 角色 ARN，形如 acs:ram::1234567890123456:role/saml-role</small>
+      <small>多数云为 Role ARN；Azure 为应用 Entity ID；GCP 为 Workforce Pool Provider ID</small>
+    </label>
+    <label>Provider ARN
+      <input type="text" name="provider_arn" value="{{.Form.ProviderARN}}">
+      <small>阿里云 IdP ARN / 腾讯云 SAML Provider / AWS Principal ARN / 火山引擎 Trusted Principal；Azure、GCP 留空</small>
     </label>
     <label>说明
       <input type="text" name="description" value="{{.Form.Description}}">

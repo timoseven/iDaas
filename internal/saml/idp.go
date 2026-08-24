@@ -1,9 +1,11 @@
 // Package saml 实现 iDaas 作为 SAML 2.0 IdP：metadata 生成、IdP-initiated
-// SAMLResponse 构造与签名（rsa-sha256 + enveloped xmldsig），目标为阿里云 ACS。
+// SAMLResponse 构造与签名（rsa-sha256 + enveloped xmldsig），目标为多云厂商 ACS。
 //
-// 复用 github.com/crewjam/saml 的数据类型（Assertion/Response/Attribute 等）
-// 与签名上下文（github.com/russellhaering/goxmldsig），但不走其
-// IdpAuthnRequest/ServiceProviderProvider 抽象——因为本用例为单一固定 SP（阿里云）+ IdP-initiated。
+// 各云规格差异（属性名、Role 属性值拼接顺序、ACS URL）由 internal/saml/clouds.go 预设，
+// BuildResponse 按 role.Cloud 派发，签名逻辑统一。
+//
+// 复用 github.com/crewjam/saml 的数据类型与 github.com/russellhaering/goxmldsig 签名上下文，
+// 不走其 IdpAuthnRequest/ServiceProviderProvider 抽象——因为本用例为 IdP-initiated。
 package saml
 
 import (
@@ -27,12 +29,6 @@ import (
 	dsig "github.com/russellhaering/goxmldsig"
 )
 
-// 阿里云约定的 SAML 属性名
-const (
-	AttrRole        = "https://www.aliyun.com/SAML-Role/Attributes/Role"
-	AttrSessionName = "https://www.aliyun.com/SAML-Role/Attributes/RoleSessionName"
-)
-
 const (
 	nameIDUnspecified = "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"
 	cmBearer          = "urn:oasis:names:tc:SAML:2.0:cm:bearer"
@@ -41,14 +37,12 @@ const (
 	xmlDecl           = `<?xml version="1.0" encoding="UTF-8"?>` + "\n"
 )
 
-// Config SAML IdP 配置
+// Config SAML IdP 配置（与具体云无关：证书/EntityID/组织信息/有效期）
 type Config struct {
 	EntityID  string
 	BaseURL   string
-	ACSURL    string
 	CertPath  string
 	KeyPath   string
-	IdpARN    string
 	ValidMins int
 	OrgName   string
 	OrgDisp   string
@@ -166,17 +160,41 @@ func (i *IdP) Metadata() (string, error) {
 	return xmlDecl + string(data), nil
 }
 
-// BuildResponse 构造并签名 IdP-initiated SAMLResponse，返回 XML 字符串
-func (i *IdP) BuildResponse(username, roleARN string) (string, error) {
-	if i.cfg.IdpARN == "" {
-		return "", errors.New("未配置 SAML_IDP_ARN（阿里云侧创建 SAML IdP 后填入）")
+// BuildResponse 构造并签名 IdP-initiated SAMLResponse，按 role.Cloud 派发云规格，返回 XML 字符串。
+//
+// 入参 role 携带 Cloud/ARN/ProviderARN，决定 ACS URL、属性名、Role 属性值拼接顺序。
+func (i *IdP) BuildResponse(username string, role Role) (string, error) {
+	spec, ok := LookupCloud(Cloud(role.Cloud))
+	if !ok {
+		return "", fmt.Errorf("未知云厂商标识：%q", role.Cloud)
 	}
+	if spec.NeedsProviderARN && role.ProviderARN == "" {
+		return "", fmt.Errorf("云 %s 需要 %s，但角色未填写", spec.Label, spec.ProviderLabel)
+	}
+
 	now := time.Now().UTC()
 	notBefore := now.Add(-1 * time.Minute)
 	notOnOrAfter := now.Add(time.Duration(i.cfg.ValidMins) * time.Minute)
 
 	assertionID := "id-" + randomHex(20)
 	responseID := "id-" + randomHex(20)
+
+	// 按 spec 构造 AttributeStatement
+	attrs := []saml.Attribute{}
+	if spec.RoleAttrName != "" {
+		if v := spec.roleAttrValue(role.ARN, role.ProviderARN); v != "" {
+			attrs = append(attrs, saml.Attribute{
+				Name:   spec.RoleAttrName,
+				Values: []saml.AttributeValue{{Type: "xs:string", Value: v}},
+			})
+		}
+	}
+	if spec.SessionAttrName != "" {
+		attrs = append(attrs, saml.Attribute{
+			Name:   spec.SessionAttrName,
+			Values: []saml.AttributeValue{{Type: "xs:string", Value: username}},
+		})
+	}
 
 	assertion := &saml.Assertion{
 		ID:           assertionID,
@@ -189,7 +207,7 @@ func (i *IdP) BuildResponse(username, roleARN string) (string, error) {
 				Method: cmBearer,
 				SubjectConfirmationData: &saml.SubjectConfirmationData{
 					NotOnOrAfter: notOnOrAfter,
-					Recipient:    i.cfg.ACSURL,
+					Recipient:    spec.ACSURL,
 				},
 			}},
 		},
@@ -202,12 +220,9 @@ func (i *IdP) BuildResponse(username, roleARN string) (string, error) {
 				AuthnContextClassRef: &saml.AuthnContextClassRef{Value: authnCtxClass},
 			},
 		}},
-		AttributeStatements: []saml.AttributeStatement{{
-			Attributes: []saml.Attribute{
-				{Name: AttrRole, Values: []saml.AttributeValue{{Type: "xs:string", Value: i.cfg.IdpARN + "," + roleARN}}},
-				{Name: AttrSessionName, Values: []saml.AttributeValue{{Type: "xs:string", Value: username}}},
-			},
-		}},
+	}
+	if len(attrs) > 0 {
+		assertion.AttributeStatements = []saml.AttributeStatement{{Attributes: attrs}}
 	}
 
 	// 1. 签名 Assertion（enveloped）
@@ -223,7 +238,7 @@ func (i *IdP) BuildResponse(username, roleARN string) (string, error) {
 	// 2. 构造 Response（Issuer, Signature, Status），追加已签名 Assertion
 	response := &saml.Response{
 		ID:           responseID,
-		Destination:  i.cfg.ACSURL,
+		Destination:  spec.ACSURL,
 		IssueInstant: now,
 		Version:      "2.0",
 		Issuer:       &saml.Issuer{Format: issuerFormat, Value: i.cfg.EntityID},
@@ -247,6 +262,13 @@ func (i *IdP) BuildResponse(username, roleARN string) (string, error) {
 	buf.WriteString(xmlDecl)
 	responseEl.WriteTo(&buf, &etree.WriteSettings{})
 	return buf.String(), nil
+}
+
+// Role SAML 层所需的角色信息（从 models.RamRole 投影而来，避免 saml 包反向依赖 models）
+type Role struct {
+	Cloud       string
+	ARN         string
+	ProviderARN string
 }
 
 func orgURL(env, base string) string {

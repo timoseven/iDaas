@@ -6,22 +6,60 @@ import (
 	"strconv"
 
 	"idaas/internal/auth"
+	"idaas/internal/models"
+	"idaas/internal/saml"
 )
 
-// portalDashboard GET / 用户门户：列出当前用户的可用角色绑定
+// portalDashboard GET / 用户门户：按云分组列出当前用户的可用角色绑定
 func (s *Server) portalDashboard(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	bindings, err := s.store.ListBindingsByUser(user.ID, true) // 仅展示角色仍启用的绑定
+	bindings, err := s.store.ListBindingsByUser(user.ID, true)
 	if err != nil {
 		http.Error(w, "读取角色绑定失败", http.StatusInternalServerError)
 		return
 	}
 	s.render(w, r, "portal/dashboard", map[string]any{
-		"Bindings": bindings,
+		"Groups": groupBindingsByCloud(bindings),
 	})
 }
 
-// samlLogin POST /role/{id}/console 构造 IdP-initiated SAMLResponse 并自动提交到阿里云 ACS
+// cloudGroup 门户分组展示结构
+type cloudGroup struct {
+	Cloud    string
+	Label    string
+	Bindings []*models.BindingView
+}
+
+// groupBindingsByCloud 把 ListBindingsByUser 返回的 BindingView 按 cloud 分组
+func groupBindingsByCloud(bindings []*models.BindingView) []cloudGroup {
+	byCloud := map[string]*cloudGroup{}
+	order := []string{}
+	for _, b := range bindings {
+		c := b.Role.Cloud
+		if c == "" {
+			c = "aliyun"
+		}
+		g, exists := byCloud[c]
+		if !exists {
+			spec, _ := saml.LookupCloud(saml.Cloud(c))
+			label := c
+			if spec.Label != "" {
+				label = spec.Label
+			}
+			g = &cloudGroup{Cloud: c, Label: label}
+			byCloud[c] = g
+			order = append(order, c)
+		}
+		g.Bindings = append(g.Bindings, b)
+	}
+	out := make([]cloudGroup, 0, len(order))
+	for _, c := range order {
+		out = append(out, *byCloud[c])
+	}
+	return out
+}
+
+// samlLogin POST /role/{id}/console 构造 IdP-initiated SAMLResponse 并自动提交到对应云 ACS
 func (s *Server) samlLogin(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 
@@ -70,7 +108,17 @@ func (s *Server) samlLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	xmlResp, err := s.idp.BuildResponse(user.Username, role.ARN)
+	spec, ok := saml.LookupCloud(saml.Cloud(role.Cloud))
+	if !ok {
+		http.Error(w, "未知云厂商："+role.Cloud, http.StatusBadRequest)
+		return
+	}
+
+	xmlResp, err := s.idp.BuildResponse(user.Username, saml.Role{
+		Cloud:       role.Cloud,
+		ARN:         role.ARN,
+		ProviderARN: role.ProviderARN,
+	})
 	if err != nil {
 		http.Error(w, "生成 SAML 断言失败："+err.Error(), http.StatusInternalServerError)
 		return
@@ -78,7 +126,7 @@ func (s *Server) samlLogin(w http.ResponseWriter, r *http.Request) {
 
 	s.render(w, r, "portal/saml_post", map[string]any{
 		"SAMLResponse": base64.StdEncoding.EncodeToString([]byte(xmlResp)),
-		"ACSURL":       s.cfg.SAMLACSURL,
+		"ACSURL":       spec.ACSURL,
 	})
 }
 

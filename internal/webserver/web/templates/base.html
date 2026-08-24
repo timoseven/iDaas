@@ -17,7 +17,7 @@
         {{if .User.IsAdmin}}
         <a href="/admin" class="{{if hasPrefix .CurrentURL "/admin"}}active{{end}}">管理</a>
         <a href="/admin/users">用户</a>
-        <a href="/admin/roles">RAM 角色</a>
+        <a href="/admin/roles">角色</a>
         {{end}}
         <a href="/logout" class="muted">退出 ({{.User.Username}})</a>
       </nav>

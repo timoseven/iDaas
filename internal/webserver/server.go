@@ -78,6 +78,13 @@ func (s *Server) loadTemplates() error {
 			}
 			return t.Local().Format("2006-01-02 15:04")
 		},
+		"cloudLabel": func(c string) string {
+			spec, ok := saml.LookupCloud(saml.Cloud(c))
+			if !ok || spec.Label == "" {
+				return c
+			}
+			return spec.Label
+		},
 	}
 	templates := make(map[string]*template.Template, len(pageFiles))
 	for name, files := range pageFiles {

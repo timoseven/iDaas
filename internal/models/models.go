@@ -16,11 +16,13 @@ type User struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// RamRole 阿里云 RAM 角色（站点内登记）
+// RamRole 云厂商角色（站点内登记，支持阿里云/腾讯云/AWS/火山引擎/Azure/GCP）
 type RamRole struct {
 	ID          uint64    `json:"id"`
 	Name        string    `json:"name"`
-	ARN         string    `json:"arn"`
+	Cloud       string    `json:"cloud"`        // aliyun/tencent/aws/volc/azure/gcp
+	ARN         string    `json:"arn"`          // 多数云为 Role ARN；Azure 为应用 Entity ID；GCP 为 Workforce Pool Provider ID
+	ProviderARN string    `json:"provider_arn"` // IdP ARN / Principal ARN / SAML Provider；Azure/GCP 不需要
 	Description string    `json:"description,omitempty"`
 	IsActive    bool      `json:"is_active"`
 	CreatedAt   time.Time `json:"created_at"`

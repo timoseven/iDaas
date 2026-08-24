@@ -14,13 +14,11 @@ type Config struct {
 	DBPath     string
 	SecretKey  string
 
-	// SAML 2.0 IdP
+	// SAML 2.0 IdP（与具体云无关；各云规格由 internal/saml/clouds.go 内置）
 	SAMLEntityID  string
 	SAMLBaseURL   string
-	SAMLACSURL    string
 	SAMLCertPath  string
 	SAMLKeyPath   string
-	SAMLIdpARN    string
 	SAMLValidMins int
 	SAMLOrgName   string
 	SAMLOrgDisp   string
@@ -37,10 +35,8 @@ func Load() (*Config, error) {
 
 		SAMLEntityID:  env("SAML_ENTITY_ID", "http://localhost:8088/saml/metadata"),
 		SAMLBaseURL:   strings.TrimRight(env("SAML_BASE_URL", "http://localhost:8088"), "/"),
-		SAMLACSURL:    env("SAML_ACS_URL", "https://signin.aliyun.com/saml/SSO"),
 		SAMLCertPath:  env("SAML_CERT_PATH", "certs/idp.crt"),
 		SAMLKeyPath:   env("SAML_KEY_PATH", "certs/idp.key"),
-		SAMLIdpARN:    env("SAML_IDP_ARN", ""),
 		SAMLValidMins: envInt("SAML_ASSERTION_VALID_MINUTES", 5),
 		SAMLOrgName:   env("SAML_ORG_NAME", "iDaas"),
 		SAMLOrgDisp:   env("SAML_ORG_DISPLAY_NAME", "iDaas Identity Provider"),
