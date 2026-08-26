@@ -90,12 +90,13 @@ chmod 600 certs/idp.key
 ```
 
 ### 3. 配置环境变量
-config 从**进程环境变量**读取（不会自动解析 `.env` 文件）。推荐：
+config 从**进程环境变量**读取，支持用 `-env` 加载 .env 文件：
 ```bash
 cp .env.example .env
 # 编辑 .env，至少设置 SECRET_KEY
-set -a; . ./.env; set +a
+./idaas -env .env
 ```
+> 已存在的进程环境变量优先，不会被 .env 文件覆盖。也可继续用 `set -a; . ./.env; set +a` 或 systemd `EnvironmentFile=.env`。
 关键变量：
 
 | 变量 | 默认 | 说明 |
@@ -145,7 +146,8 @@ set -a; . ./.env; set +a
 
 ## CLI
 ```bash
-./idaas                       # 启动 HTTP 服务
+./idaas                        # 启动 HTTP 服务
+./idaas -env .env              # 启动并加载指定 env 文件（已存在的环境变量优先）
 ./idaas createsuperuser [...]  # 创建管理员（支持 -username/-password/-email/-display-name/-db）
 ```
 

@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strconv"
@@ -63,4 +64,42 @@ func envInt(key string, def int) int {
 		}
 	}
 	return def
+}
+
+// LoadEnvFile 读取 .env 风格文件并注入进程环境变量。
+// 已存在的进程环境变量优先（不被文件覆盖），便于用 shell/systemd 覆盖个别值。
+// 支持 # 整行注释、export 前缀、单/双引号包裹的值。
+func LoadEnvFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		eq := strings.IndexByte(line, '=')
+		if eq < 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:eq])
+		val := strings.TrimSpace(line[eq+1:])
+		if key == "" {
+			continue
+		}
+		if n := len(val); n >= 2 {
+			first, last := val[0], val[n-1]
+			if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+				val = val[1 : n-1]
+			}
+		}
+		if _, ok := os.LookupEnv(key); !ok {
+			os.Setenv(key, val)
+		}
+	}
+	return scanner.Err()
 }

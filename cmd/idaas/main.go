@@ -33,6 +33,16 @@ func main() {
 
 // runServer 启动 HTTP 服务
 func runServer() error {
+	fs := flag.NewFlagSet("idaas", flag.ExitOnError)
+	envFile := fs.String("env", "", "加载 .env 风格文件到进程环境变量（已存在的环境变量优先，不被覆盖）")
+	fs.Parse(os.Args[1:])
+
+	if *envFile != "" {
+		if err := config.LoadEnvFile(*envFile); err != nil {
+			return fmt.Errorf("加载环境变量文件 %q 失败：%w", *envFile, err)
+		}
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
