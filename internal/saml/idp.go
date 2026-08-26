@@ -211,7 +211,13 @@ func (i *IdP) BuildResponse(username string, role Role) (string, error) {
 				},
 			}},
 		},
-		Conditions: &saml.Conditions{NotBefore: notBefore, NotOnOrAfter: notOnOrAfter},
+		Conditions: &saml.Conditions{
+			NotBefore:    notBefore,
+			NotOnOrAfter: notOnOrAfter,
+			AudienceRestrictions: []saml.AudienceRestriction{
+				{Audience: saml.Audience{Value: spec.audience(role.ARN, role.ProviderARN)}},
+			},
+		},
 		AuthnStatements: []saml.AuthnStatement{{
 			AuthnInstant:        now,
 			SessionIndex:        assertionID,

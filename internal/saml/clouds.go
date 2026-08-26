@@ -174,3 +174,18 @@ func (spec CloudSpec) roleAttrValue(roleARN, providerARN string) string {
 		return ""
 	}
 }
+
+// audience 返回该云在 Conditions/AudienceRestriction 中期望的 Audience 值。
+//   - 阿里云/火山引擎（orderProviderFirst）：Audience = ProviderARN（IdP ARN / Trusted Principal）
+//   - AWS/腾讯云（orderRoleFirst）：Audience = 该云 ACS URL
+//   - Azure/GCP（orderNone）：Audience = SP 自身标识（Azure 应用 Entity ID / GCP Workforce Provider，即 roleARN）
+func (spec CloudSpec) audience(roleARN, providerARN string) string {
+	switch spec.order {
+	case orderProviderFirst:
+		return providerARN
+	case orderRoleFirst:
+		return spec.ACSURL
+	default:
+		return roleARN
+	}
+}
