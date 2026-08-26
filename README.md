@@ -146,10 +146,12 @@ cp .env.example .env
 
 ## CLI
 ```bash
-./idaas                        # 启动 HTTP 服务
-./idaas -env .env              # 启动并加载指定 env 文件（已存在的环境变量优先）
+./idaas                        # 启动 HTTP 服务（前台）
+./idaas -daemon                # 后台 daemon 运行，日志默认写 idaas.log
+./idaas -daemon -log /var/log/idaas.log -env .env   # 后台 + 指定日志与 env 文件
 ./idaas createsuperuser [...]  # 创建管理员（支持 -username/-password/-email/-display-name/-db）
 ```
+> `-daemon` 通过 setsid 脱离终端，stdout/stderr 写入 `-log` 指定文件；父进程打印 PID 后退出，子进程由 init 接管，关闭终端不受影响。停止用 `kill <PID>` 或 `kill $(lsof -ti:8088)`。
 
 ## 安全说明
 - 服务端不存任何云厂商 AK/SK / AccessKey，认证完全依赖 SAML 签名

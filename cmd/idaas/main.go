@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 
 	"idaas/internal/auth"
 	"idaas/internal/config"
@@ -35,7 +37,13 @@ func main() {
 func runServer() error {
 	fs := flag.NewFlagSet("idaas", flag.ExitOnError)
 	envFile := fs.String("env", "", "加载 .env 风格文件到进程环境变量（已存在的环境变量优先，不被覆盖）")
+	daemon := fs.Bool("daemon", false, "后台 daemon 方式运行：脱离终端，输出写入 -log 指定文件")
+	logFile := fs.String("log", "idaas.log", "daemon 模式下的日志文件路径")
 	fs.Parse(os.Args[1:])
+
+	if *daemon {
+		return startDaemon(os.Args[0], *envFile, *logFile)
+	}
 
 	if *envFile != "" {
 		if err := config.LoadEnvFile(*envFile); err != nil {
@@ -80,6 +88,31 @@ func runServer() error {
 
 	httpSrv := &http.Server{Addr: cfg.ListenAddr, Handler: srv.Handler()}
 	return httpSrv.ListenAndServe()
+}
+
+// startDaemon 以 daemon 方式重新拉起自身：子进程脱离终端（setsid），stdin 取自
+// /dev/null，stdout/stderr 写入日志文件；父进程打印 PID 后退出，子进程由 init 接管。
+func startDaemon(exe, envFile, logFile string) error {
+	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("打开日志文件 %q 失败：%w", logFile, err)
+	}
+	defer f.Close()
+
+	args := []string{}
+	if envFile != "" {
+		args = append(args, "-env", envFile)
+	}
+	cmd := exec.Command(exe, args...)
+	cmd.Stdin = nil
+	cmd.Stdout = f
+	cmd.Stderr = f
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("启动 daemon 失败：%w", err)
+	}
+	fmt.Printf("iDaas 已在后台运行（PID=%d），日志：%s\n", cmd.Process.Pid, logFile)
+	return nil
 }
 
 // createSuperUser 创建管理员账户
