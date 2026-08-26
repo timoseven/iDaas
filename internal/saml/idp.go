@@ -34,6 +34,7 @@ const (
 	cmBearer          = "urn:oasis:names:tc:SAML:2.0:cm:bearer"
 	authnCtxClass     = "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"
 	issuerFormat      = "urn:oasis:names:tc:SAML:2.0:nameid-format:entity"
+	attrNameFormatURI = "urn:oasis:names:tc:SAML:2.0:attrname-format:uri"
 	xmlDecl           = `<?xml version="1.0" encoding="UTF-8"?>` + "\n"
 )
 
@@ -184,15 +185,17 @@ func (i *IdP) BuildResponse(username string, role Role) (string, error) {
 	if spec.RoleAttrName != "" {
 		if v := spec.roleAttrValue(role.ARN, role.ProviderARN); v != "" {
 			attrs = append(attrs, saml.Attribute{
-				Name:   spec.RoleAttrName,
-				Values: []saml.AttributeValue{{Type: "xs:string", Value: v}},
+				Name:       spec.RoleAttrName,
+				NameFormat: attrNameFormatURI,
+				Values:     []saml.AttributeValue{{Type: "xs:string", Value: v}},
 			})
 		}
 	}
 	if spec.SessionAttrName != "" {
 		attrs = append(attrs, saml.Attribute{
-			Name:   spec.SessionAttrName,
-			Values: []saml.AttributeValue{{Type: "xs:string", Value: username}},
+			Name:       spec.SessionAttrName,
+			NameFormat: attrNameFormatURI,
+			Values:     []saml.AttributeValue{{Type: "xs:string", Value: username}},
 		})
 	}
 
