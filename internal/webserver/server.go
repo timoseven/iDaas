@@ -12,6 +12,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -156,7 +157,11 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 	data["CurrentURL"] = r.URL.Path
 
 	if c, err := r.Cookie(flashCookie); err == nil && c.Value != "" {
-		data["Flash"] = c.Value
+		if msg, err := url.QueryUnescape(c.Value); err == nil {
+			data["Flash"] = msg
+		} else {
+			data["Flash"] = c.Value
+		}
 		kind := ""
 		if kc, err := r.Cookie(flashKindCookie); err == nil {
 			kind = kc.Value
@@ -182,7 +187,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 // setFlash 设置一次性 flash 消息（PRG 模式下重定向前调用）
 func setFlash(w http.ResponseWriter, kind, msg string) {
 	http.SetCookie(w, &http.Cookie{
-		Name: flashCookie, Value: msg, Path: "/",
+		Name: flashCookie, Value: url.QueryEscape(msg), Path: "/",
 		HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 60,
 	})
 	http.SetCookie(w, &http.Cookie{
