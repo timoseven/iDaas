@@ -34,7 +34,6 @@ const (
 	cmBearer          = "urn:oasis:names:tc:SAML:2.0:cm:bearer"
 	authnCtxClass     = "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"
 	issuerFormat      = "urn:oasis:names:tc:SAML:2.0:nameid-format:entity"
-	attrNameFormatURI = "urn:oasis:names:tc:SAML:2.0:attrname-format:uri"
 	xmlDecl           = `<?xml version="1.0" encoding="UTF-8"?>` + "\n"
 )
 
@@ -185,17 +184,15 @@ func (i *IdP) BuildResponse(username string, role Role) (string, error) {
 	if spec.RoleAttrName != "" {
 		if v := spec.roleAttrValue(role.ARN, role.ProviderARN); v != "" {
 			attrs = append(attrs, saml.Attribute{
-				Name:       spec.RoleAttrName,
-				NameFormat: attrNameFormatURI,
-				Values:     []saml.AttributeValue{{Type: "xs:string", Value: v}},
+				Name:   spec.RoleAttrName,
+				Values: []saml.AttributeValue{{Type: "xs:string", Value: v}},
 			})
 		}
 	}
 	if spec.SessionAttrName != "" {
 		attrs = append(attrs, saml.Attribute{
-			Name:       spec.SessionAttrName,
-			NameFormat: attrNameFormatURI,
-			Values:     []saml.AttributeValue{{Type: "xs:string", Value: username}},
+			Name:   spec.SessionAttrName,
+			Values: []saml.AttributeValue{{Type: "xs:string", Value: username}},
 		})
 	}
 
@@ -236,6 +233,7 @@ func (i *IdP) BuildResponse(username string, role Role) (string, error) {
 
 	// 1. 签名 Assertion（enveloped）
 	assertionEl := assertion.Element()
+	stripAttrValueExtras(assertionEl) // 移除 AttributeValue 上的 xsi:type 等属性，部分 SP 不兼容
 	signedAssertionEl, err := i.signingCtx.SignEnveloped(assertionEl)
 	if err != nil {
 		return "", fmt.Errorf("签名 Assertion 失败：%w", err)
@@ -243,6 +241,7 @@ func (i *IdP) BuildResponse(username string, role Role) (string, error) {
 	sigEl := signedAssertionEl.ChildElements()[len(signedAssertionEl.ChildElements())-1]
 	assertion.Signature = sigEl
 	signedAssertionEl = assertion.Element()
+	stripAttrValueExtras(signedAssertionEl)
 
 	// 2. 构造 Response（Issuer, Signature, Status），追加已签名 Assertion
 	response := &saml.Response{
@@ -294,4 +293,19 @@ func randomHex(n int) string {
 		return fmt.Sprintf("%x", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b)
+}
+
+// stripAttrValueExtras 递归遍历 etree 元素树，移除 AttributeValue 上的
+// xmlns:xsi、xmlns:xs 命名空间声明和 xsi:type 属性。
+// 部分 SAML SP（如阿里云）对带 xsi:type 的 AttributeValue 解析异常，
+// 去除后属性值以纯文本形式呈现，兼容性更好。
+func stripAttrValueExtras(el *etree.Element) {
+	for _, child := range el.ChildElements() {
+		if child.Tag == "AttributeValue" {
+			child.RemoveAttr("xmlns:xsi")
+			child.RemoveAttr("xmlns:xs")
+			child.RemoveAttr("xsi:type")
+		}
+		stripAttrValueExtras(child)
+	}
 }

@@ -118,6 +118,7 @@ func (s *Server) routes() {
 	// 门户（需登录）
 	mux.HandleFunc("GET /", auth.RequireLogin(s.portalDashboard))
 	mux.HandleFunc("POST /role/{id}/console", auth.RequireLogin(s.samlLogin))
+	mux.HandleFunc("GET /role/{id}/saml-debug", auth.RequireLogin(s.samlDebug))
 
 	// 后台管理（需管理员）
 	mux.HandleFunc("GET /admin", auth.RequireLogin(auth.RequireAdmin(s.adminDashboard)))

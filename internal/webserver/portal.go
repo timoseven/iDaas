@@ -130,6 +130,49 @@ func (s *Server) samlLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// samlDebug GET /role/{id}/saml-debug 调试端点：直接返回生成的 SAMLResponse XML
+func (s *Server) samlDebug(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	roleID, err := strconv.ParseUint(r.PathValue("id"), 10, 64)
+	if err != nil || roleID == 0 {
+		http.Error(w, "无效的角色 ID", http.StatusBadRequest)
+		return
+	}
+	role, err := s.store.GetRole(roleID)
+	if err != nil {
+		http.Error(w, "角色不存在", http.StatusNotFound)
+		return
+	}
+	// 权限检查
+	bindings, err := s.store.ListBindingsByUserRaw(user.ID)
+	if err != nil {
+		http.Error(w, "读取绑定失败", http.StatusInternalServerError)
+		return
+	}
+	authorized := false
+	for _, b := range bindings {
+		if b.RoleID == role.ID {
+			authorized = true
+			break
+		}
+	}
+	if !authorized {
+		http.Error(w, "无权限", http.StatusForbidden)
+		return
+	}
+	xmlResp, err := s.idp.BuildResponse(user.Username, saml.Role{
+		Cloud:       role.Cloud,
+		ARN:         role.ARN,
+		ProviderARN: role.ProviderARN,
+	})
+	if err != nil {
+		http.Error(w, "生成失败："+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Write([]byte(xmlResp))
+}
+
 // samlMetadata GET /saml/metadata 公开端点：返回 IdP metadata XML
 func (s *Server) samlMetadata(w http.ResponseWriter, r *http.Request) {
 	md, err := s.idp.Metadata()
