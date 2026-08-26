@@ -1,18 +1,18 @@
-{{define "title"}}{{if .User}}编辑用户{{else}}新建用户{{end}} - iDaas{{end}}
+{{define "title"}}{{if .EditUser}}编辑用户{{else}}新建用户{{end}} - iDaas{{end}}
 {{define "content"}}
 <div class="page-head">
-  <h2>{{if .User}}编辑用户{{else}}新建用户{{end}}</h2>
+  <h2>{{if .EditUser}}编辑用户{{else}}新建用户{{end}}</h2>
 </div>
 {{if .Error}}<div class="flash error">{{.Error}}</div>{{end}}
 <form method="post" action="{{.Action}}" class="form">
   <fieldset>
     <legend>账户信息</legend>
     <label>用户名
-      <input type="text" name="username" value="{{.Form.Username}}" required {{if .User}}disabled{{end}}>
-      {{if .User}}<small>用户名创建后不可修改</small>{{end}}
+      <input type="text" name="username" value="{{.Form.Username}}" required {{if .EditUser}}disabled{{end}}>
+      {{if .EditUser}}<small>用户名创建后不可修改</small>{{end}}
     </label>
-    <label>密码 {{if .User}}<small>留空表示不修改</small>{{end}}
-      <input type="password" name="password" {{if .User}}{{else}}required{{end}} autocomplete="new-password">
+    <label>密码 {{if .EditUser}}<small>留空表示不修改</small>{{end}}
+      <input type="password" name="password" {{if .EditUser}}{{else}}required{{end}} autocomplete="new-password">
     </label>
     <label>显示名
       <input type="text" name="display_name" value="{{.Form.DisplayName}}">
@@ -24,7 +24,7 @@
     <label class="checkbox"><input type="checkbox" name="is_active" value="1" {{if .Form.IsActive}}checked{{end}}> 启用</label>
   </fieldset>
 
-  {{if .User}}
+  {{if .EditUser}}
   <fieldset>
     <legend>角色绑定</legend>
     {{if .Bindings}}
@@ -37,7 +37,7 @@
         <td class="arn">{{.Role.ARN}}</td>
         <td>{{if .UserRole.Remark}}{{.UserRole.Remark}}{{else}}<span class="muted">—</span>{{end}}</td>
         <td class="actions-col">
-          <form method="post" action="/admin/users/{{$.User.ID}}/bindings/{{.UserRole.ID}}/delete" class="inline">
+          <form method="post" action="/admin/users/{{$.EditUser.ID}}/bindings/{{.UserRole.ID}}/delete" class="inline">
             <button type="submit" class="btn sm danger">解绑</button>
           </form>
         </td>
@@ -57,7 +57,7 @@
           {{range .AvailableRoles}}<option value="{{.ID}}">{{.Name}} ({{.ARN}})</option>{{end}}
         </select>
         <input type="text" name="remark" placeholder="备注（可选）">
-        <button type="submit" class="btn" formaction="/admin/users/{{.User.ID}}/bindings">绑定</button>
+        <button type="submit" class="btn" formaction="/admin/users/{{.EditUser.ID}}/bindings">绑定</button>
       </div>
     </div>
     {{end}}
@@ -65,7 +65,7 @@
   {{end}}
 
   <div class="form-actions">
-    <button type="submit" class="btn primary">{{if .User}}保存{{else}}创建{{end}}</button>
+    <button type="submit" class="btn primary">{{if .EditUser}}保存{{else}}创建{{end}}</button>
     <a href="/admin/users" class="btn">取消</a>
   </div>
 </form>

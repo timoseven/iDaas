@@ -86,7 +86,7 @@ func (s *Server) adminUserForm(w http.ResponseWriter, r *http.Request) {
 	bindings, _ := s.store.ListBindingsByUserRaw(uid)
 	available, _ := s.store.AvailableRoles(uid)
 	s.render(w, r, "admin/user_form", map[string]any{
-		"User":           u,
+		"EditUser":       u,
 		"Action":         "/admin/users/" + id + "/edit",
 		"Form":           userForm{Username: u.Username, DisplayName: u.DisplayName, Email: u.Email, IsAdmin: u.IsAdmin, IsActive: u.IsActive},
 		"Bindings":       bindings,
@@ -159,7 +159,7 @@ func (s *Server) adminUserUpdate(w http.ResponseWriter, r *http.Request) {
 		bindings, _ := s.store.ListBindingsByUserRaw(uid)
 		available, _ := s.store.AvailableRoles(uid)
 		s.render(w, r, "admin/user_form", map[string]any{
-			"User":           existing,
+			"EditUser":       existing,
 			"Action":         "/admin/users/" + r.PathValue("id") + "/edit",
 			"Form":           form.userForm,
 			"Bindings":       bindings,
