@@ -63,7 +63,7 @@ var clouds = map[Cloud]CloudSpec{
 		ACSURL:              "https://signin.aliyun.com/saml-role/sso",
 		RoleAttrName:        "https://www.aliyun.com/SAML-Role/Attributes/Role",
 		SessionAttrName:     "https://www.aliyun.com/SAML-Role/Attributes/RoleSessionName",
-		order:               orderProviderFirst,
+		order:               orderRoleFirst,
 		NeedsProviderARN:    true,
 		ProviderLabel:       "IdP ARN",
 		providerPlaceholder: "acs:ram::<主账号ID>:saml-provider/<IdP名>",

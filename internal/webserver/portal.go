@@ -2,6 +2,7 @@ package webserver
 
 import (
 	"encoding/base64"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -123,6 +124,10 @@ func (s *Server) samlLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "生成 SAML 断言失败："+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// 记录 SAML 登录日志，便于排查
+	log.Printf("[SAML] 用户=%s 云=%s ACS=%s RoleARN=%s ProviderARN=%s",
+		user.Username, role.Cloud, spec.ACSURL, role.ARN, role.ProviderARN)
 
 	s.render(w, r, "portal/saml_post", map[string]any{
 		"SAMLResponse": base64.StdEncoding.EncodeToString([]byte(xmlResp)),
