@@ -6,8 +6,6 @@
 // 添加新云：在 clouds 注册表加一个 CloudSpec 即可，无需改签名逻辑。
 package saml
 
-import "strings"
-
 // Cloud 云厂商标识（用作 role.Cloud 取值）
 type Cloud string
 
@@ -54,8 +52,7 @@ type CloudSpec struct {
 	arnLabel string
 	// arnPlaceholder Role ARN 字段 placeholder
 	arnPlaceholder string
-	// fixedAudience 固定 Audience 值或模板；非空时优先使用，空则按 order 派发。
-	// 支持 {accountId} 占位符，会从 ARN 中提取账号 ID 替换（阿里云）。
+	// fixedAudience 固定 Audience 值（SP Entity ID）；非空时优先使用，空则按 order 派发
 	fixedAudience string
 }
 
@@ -63,7 +60,7 @@ type CloudSpec struct {
 var clouds = map[Cloud]CloudSpec{
 	CloudAliyun: {
 		Label:               "阿里云",
-		ACSURL:              "https://signin.aliyun.com/saml/SSO",
+		ACSURL:              "https://signin.aliyun.com/saml-role/sso",
 		RoleAttrName:        "https://www.aliyun.com/SAML-Role/Attributes/Role",
 		SessionAttrName:     "https://www.aliyun.com/SAML-Role/Attributes/RoleSessionName",
 		order:               orderProviderFirst,
@@ -72,7 +69,7 @@ var clouds = map[Cloud]CloudSpec{
 		providerPlaceholder: "acs:ram::<主账号ID>:saml-provider/<IdP名>",
 		arnLabel:            "Role ARN",
 		arnPlaceholder:      "acs:ram::<主账号ID>:role/<角色名>",
-		fixedAudience:       "https://signin.aliyun.com/{accountId}/saml/SSO",
+		fixedAudience:       "urn:alibaba:cloudcomputing",
 	},
 	CloudTencent: {
 		Label:               "腾讯云",
@@ -182,19 +179,13 @@ func (spec CloudSpec) roleAttrValue(roleARN, providerARN string) string {
 }
 
 // audience 返回该云在 Conditions/AudienceRestriction 中期望的 Audience 值。
-//   - 若 fixedAudience 非空，优先使用；支持 {accountId} 占位符（阿里云从 ARN 提取账号 ID 替换）
+//   - 若 fixedAudience 非空，优先返回（如阿里云 SP Entity ID: urn:alibaba:cloudcomputing）
 //   - 阿里云/火山引擎（orderProviderFirst）：Audience = ProviderARN（IdP ARN / Trusted Principal）
 //   - AWS/腾讯云（orderRoleFirst）：Audience = 该云 ACS URL
 //   - Azure/GCP（orderNone）：Audience = SP 自身标识（Azure 应用 Entity ID / GCP Workforce Provider，即 roleARN）
 func (spec CloudSpec) audience(roleARN, providerARN string) string {
 	if spec.fixedAudience != "" {
-		if strings.Contains(spec.fixedAudience, "{accountId}") {
-			if acc := extractAccountID(roleARN, providerARN); acc != "" {
-				return strings.ReplaceAll(spec.fixedAudience, "{accountId}", acc)
-			}
-		} else {
-			return spec.fixedAudience
-		}
+		return spec.fixedAudience
 	}
 	switch spec.order {
 	case orderProviderFirst:
@@ -204,16 +195,4 @@ func (spec CloudSpec) audience(roleARN, providerARN string) string {
 	default:
 		return roleARN
 	}
-}
-
-// extractAccountID 从 ARN 中提取主账号 ID。
-// 阿里云 ARN 格式：acs:ram::<accountId>:role/<name> 或 acs:ram::<accountId>:saml-provider/<name>
-func extractAccountID(arns ...string) string {
-	for _, arn := range arns {
-		parts := strings.Split(arn, ":")
-		if len(parts) >= 4 && parts[0] == "acs" && parts[3] != "" {
-			return parts[3]
-		}
-	}
-	return ""
 }
