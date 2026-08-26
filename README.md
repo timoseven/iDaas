@@ -18,14 +18,14 @@
 
 ## 支持的云厂商
 
-| 云 | 标识 | ACS URL | Role 属性值拼接顺序 | 是否需 Provider |
-| --- | --- | --- | --- | --- |
-| 阿里云 | `aliyun` | `https://signin.aliyun.com/saml/SSO` | `<IdP-ARN>,<Role-ARN>` | 是（IdP ARN） |
-| 腾讯云 | `tencent` | `https://cloud.tencent.com/saml/sso` | `<Role-ARN>,<Provider>` | 是（SAML Provider） |
-| AWS | `aws` | `https://signin.aws.amazon.com/saml` | `<Role-ARN>,<Principal-ARN>` | 是（Principal / SAML Provider ARN） |
-| 火山引擎 | `volc` | `https://signin.volcengine.com/saml/SSO` | `<Provider>,<Role-ARN>` | 是（Trusted Principal） |
-| Azure | `azure` | `https://login.microsoftonline.com/<tenant>/saml2` | 无 Role 属性（NameID 登录） | 否 |
-| Google GCP | `gcp` | `https://www.googleapis.com/cloud-identity/saml/acs` | 无 Role 属性（Workforce Pool） | 否 |
+| 云 | 标识 | ACS URL | Role 属性值拼接顺序 | Audience | 是否需 Provider |
+| --- | --- | --- | --- | --- | --- |
+| 阿里云 | `aliyun` | `https://signin.aliyun.com/saml-role/sso` | `<Role-ARN>,<IdP-ARN>` | `urn:alibaba:cloudcomputing` | 是（IdP ARN） |
+| 腾讯云 | `tencent` | `https://cloud.tencent.com/saml/sso` | `<Role-ARN>,<Provider>` | ACS URL | 是（SAML Provider） |
+| AWS | `aws` | `https://signin.aws.amazon.com/saml` | `<Role-ARN>,<Principal-ARN>` | ACS URL | 是（Principal / SAML Provider ARN） |
+| 火山引擎 | `volc` | `https://signin.volcengine.com/saml/SSO` | `<Provider>,<Role-ARN>` | Provider ARN | 是（Trusted Principal） |
+| Azure | `azure` | `https://login.microsoftonline.com/<tenant>/saml2` | 无 Role 属性（NameID 登录） | Role ARN | 否 |
+| Google GCP | `gcp` | `https://www.googleapis.com/cloud-identity/saml/acs` | 无 Role 属性（Workforce Pool） | Role ARN | 否 |
 
 > Azure/GCP 仅以 NameID 作为联合身份，应用侧 / Workforce Pool 决定权限，无需 Role 扮演属性；在 iDaas 角色表单中 Provider ARN 留空即可。
 
@@ -63,7 +63,7 @@ iDaas/
 │   └── webserver/             # HTTP 层（路由/模板/静态/flash）
 │       ├── server.go          # 路由注册 + 模板加载 + render + cloudLabel FuncMap
 │       ├── auth_routes.go     # /login /logout
-│       ├── portal.go          # / /role/{id}/console /saml/metadata（按云分组）
+│       ├── portal.go          # / /role/{id}/console /role/{id}/saml-debug /saml/metadata（按云分组）
 │       ├── admin.go           # /admin/* 用户/角色/绑定 CRUD（含 cloud / provider_arn）
 │       └── web/               # embed 资源：templates/ + static/css/
 ├── certs/idp.crt, idp.key     # IdP 证书私钥（手动放置）
@@ -140,7 +140,9 @@ cp .env.example .env
 - `Issuer` = IdP EntityID
 - `NameID` = 网站用户名
 - `Destination` = 对应云 ACS URL
-- Role 属性（阿里云 / 腾讯云 / AWS / 火山引擎）：属性名与值拼接顺序见上表（如 AWS 为 `<Role-ARN>,<Principal-ARN>`，与阿里云顺序相反）
+- `Audience` = 各云期望值（见上表，阿里云为 `urn:alibaba:cloudcomputing`）
+- Role 属性（阿里云 / 腾讯云 / AWS / 火山引擎）：属性名与值拼接顺序见上表（阿里云与 AWS 均为 `<Role-ARN>,<Provider-ARN>`，火山引擎相反）
+- AttributeValue 为纯文本，不含 `xsi:type` 属性（部分 SP 不兼容带类型的属性值）
 - Azure / GCP：仅 NameID，无 Role 属性
 - Response 与 Assertion 各一次 enveloped xmldsig 签名（rsa-sha256 + sha256）
 

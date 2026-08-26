@@ -29,6 +29,25 @@
   - [ ] 例如 `AliyunOSSReadOnlyAccess`、`AliyunRAMFullAccess`（慎用）
   - [ ] 或自定义最小权限策略
 
+> **信任策略**（脚本编辑模式示例）：
+> ```json
+> {
+>   "Version": "1",
+>   "Statement": [{
+>     "Effect": "Allow",
+>     "Action": "sts:AssumeRole",
+>     "Principal": {
+>       "Federated": ["acs:ram::<主账号ID>:saml-provider/idaas"]
+>     },
+>     "Condition": {
+>       "StringEquals": {
+>         "saml:recipient": "https://signin.aliyun.com/saml-role/sso"
+>       }
+>     }
+>   }]
+> }
+> ```
+
 ## 三、在 iDaas 后台登记角色并绑定用户
 - [ ] 管理员登录 iDaas → **角色管理** → **新建角色**
   - [ ] 云厂商：选择「阿里云」
@@ -48,6 +67,9 @@
 
 ## 常见问题
 - **签名校验失败**：metadata 中的证书与签名所用私钥不匹配，或 metadata 未更新到最新证书（重新上传 metadata）。
+- **「属性错误 Role」**：SAML Response 中 Role 属性缺失或格式不正确（iDaas 已内置正确格式，若仍报错请检查 metadata 是否最新）。
+- **「NoPermission.NotTrusted」**：RAM 角色信任策略中的身份提供商与 SAML 响应中的不一致，或角色信任策略缺少 `Condition`（需包含 `saml:recipient` 条件）。
 - **「无权访问」/「Role not found」**：IdP ARN 与角色 ARN 主账号 ID 不一致，或角色未信任该 IdP。
 - **角色控制台报 Provider ARN 缺失**：阿里云侧 IdP 尚未创建，或 IdP ARN 未填入角色表单的 Provider ARN 字段。
 - **登录后 403/空白页**：用户未绑定角色、角色被停用。
+- **调试**：访问 `/role/<角色ID>/saml-debug` 可直接查看生成的 SAML Response XML，用于对比阿里云 SP metadata 要求。
